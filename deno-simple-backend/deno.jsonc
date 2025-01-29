@@ -1,0 +1,12 @@
+{
+  "tasks": {
+    "dev": "deno run --watch main.ts"
+  },
+  "imports": {
+    "@db/sqlite": "jsr:@db/sqlite@^0.12.0",
+    "@oak/oak": "jsr:@oak/oak@^17.1.4"
+  },
+  "fmt": {
+    "indentWidth": 4
+  }
+}
