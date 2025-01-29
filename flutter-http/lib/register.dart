@@ -33,7 +33,7 @@ class _Form extends StatelessWidget {
           obscureText: true,
           controller: password),
       SizedBox(height: 16.0),
-      Consumer<_State>(
+      Consumer<_RegisterRequest>(
         builder: (context, value, child) {
           return FilledButton(
             child: child,
@@ -57,52 +57,45 @@ class _Form extends StatelessWidget {
 sealed class _Response {
   static fromJson(Map<String, dynamic> body) {
     if (body["ok"]) {
-      return _SuccessResponse();
+      return _Success();
     } else {
-      return _ErrorResponse(message: body["message"]);
+      return _Error(message: body["message"]);
     }
   }
 }
 
-final class _NoneResponse extends _Response {}
+final class _Unitialized extends _Response {}
 
-final class _ErrorResponse extends _Response {
+final class _Loading extends _Response {}
+
+final class _Error extends _Response {
   final String message;
-  _ErrorResponse({required this.message});
+  _Error({required this.message});
 }
 
-final class _SuccessResponse extends _Response {}
+final class _Success extends _Response {}
 
-class _State extends ChangeNotifier {
-  Future<_Response> future = Future.value(_NoneResponse());
+class _RegisterRequest extends ChangeNotifier {
+  _Response response = _Unitialized();
   final String apiUrl;
 
-  _State({required this.apiUrl});
+  _RegisterRequest({required this.apiUrl});
 
   _Response _parseResponse(http.Response response) {
     return _Response.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
-  void register(String username, String password) {
+  void register(String username, String password) async {
     final body = json.encode({"username": username, "password": password});
-    future = http
+    response = _Loading();
+    notifyListeners();
+    response = await http
         .post(Uri.parse("$apiUrl/register"),
             headers: {"Content-Type": "application/json"}, body: body)
         .then(_parseResponse);
     notifyListeners();
   }
-}
-
-List<Widget> _displayedResponse(_Response? data) {
-  return switch (data) {
-    null || _NoneResponse() => [SizedBox()],
-    _ErrorResponse(message: final msg) => [
-        Text("An error occured: $msg"),
-        SizedBox(height: 16.0)
-      ],
-    _SuccessResponse() => [Text("Account created!"), SizedBox(height: 16.0)],
-  };
 }
 
 class RegisterPage extends StatelessWidget {
@@ -123,29 +116,30 @@ class RegisterPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return PageScaffold(
       child: ChangeNotifierProvider(
-        create: (_) => _State(apiUrl: config.apiUrl),
+        create: (_) => _RegisterRequest(apiUrl: config.apiUrl),
         builder: (context, _) {
-          return FutureBuilder(
-            future: Provider.of<_State>(context).future,
-            builder: (context, snapshot) {
-              if (snapshot.connectionState == ConnectionState.waiting) {
-                return CircularProgressIndicator();
-              }
-              return Column(
-                mainAxisAlignment: MainAxisAlignment.center,
-                children: <Widget>[
-                  Logo(),
-                  SizedBox(height: 16.0),
-                  _Form(),
-                  SizedBox(height: 16.0),
-                  ..._displayedResponse(snapshot.data),
-                  OutlinedButton(
-                    onPressed: () => _gotoLogin(context),
-                    child: Text("I already have an account"),
-                  ),
-                ],
-              );
-            },
+          final status =
+              switch (Provider.of<_RegisterRequest>(context).response) {
+            _Unitialized() => SizedBox(),
+            _Loading() => CircularProgressIndicator(),
+            _Error(message: final message) =>
+              Text("An error occurred: $message"),
+            _Success() => Text("Account created!"),
+          };
+          return Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: <Widget>[
+              Logo(),
+              SizedBox(height: 16.0),
+              _Form(),
+              SizedBox(height: 16.0),
+              status,
+              SizedBox(height: 16.0),
+              OutlinedButton(
+                onPressed: () => _gotoLogin(context),
+                child: Text("I already have an account"),
+              ),
+            ],
           );
         },
       ),
