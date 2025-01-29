@@ -3,12 +3,13 @@ import 'dart:convert';
 import 'package:animal_farm/config.dart';
 import 'package:animal_farm/login.dart';
 import 'package:animal_farm/logo.dart';
+import 'package:animal_farm/page_scaffold.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:http/http.dart' as http;
 
-class _RegisterForm extends StatelessWidget {
-  _RegisterForm();
+class _Form extends StatelessWidget {
+  _Form();
 
   final TextEditingController username = TextEditingController();
   final TextEditingController password = TextEditingController();
@@ -32,7 +33,7 @@ class _RegisterForm extends StatelessWidget {
           obscureText: true,
           controller: password),
       SizedBox(height: 16.0),
-      Consumer<RegisterState>(
+      Consumer<_State>(
         builder: (context, value, child) {
           return FilledButton(
             child: child,
@@ -53,33 +54,33 @@ class _RegisterForm extends StatelessWidget {
   }
 }
 
-sealed class RegisterResult {
+sealed class _Response {
   static fromJson(Map<String, dynamic> body) {
     if (body["ok"]) {
-      return Success();
+      return _SuccessResponse();
     } else {
-      return Error(message: body["message"]);
+      return _ErrorResponse(message: body["message"]);
     }
   }
 }
 
-final class None extends RegisterResult {}
+final class _NoneResponse extends _Response {}
 
-final class Error extends RegisterResult {
+final class _ErrorResponse extends _Response {
   final String message;
-  Error({required this.message});
+  _ErrorResponse({required this.message});
 }
 
-final class Success extends RegisterResult {}
+final class _SuccessResponse extends _Response {}
 
-class RegisterState extends ChangeNotifier {
-  Future<RegisterResult> future = Future.value(None());
+class _State extends ChangeNotifier {
+  Future<_Response> future = Future.value(_NoneResponse());
   final String apiUrl;
 
-  RegisterState({required this.apiUrl});
+  _State({required this.apiUrl});
 
-  RegisterResult _parseResponse(http.Response response) {
-    return RegisterResult.fromJson(
+  _Response _parseResponse(http.Response response) {
+    return _Response.fromJson(
         jsonDecode(response.body) as Map<String, dynamic>);
   }
 
@@ -89,7 +90,19 @@ class RegisterState extends ChangeNotifier {
         .post(Uri.parse("$apiUrl/register"),
             headers: {"Content-Type": "application/json"}, body: body)
         .then(_parseResponse);
+    notifyListeners();
   }
+}
+
+List<Widget> _displayedResponse(_Response? data) {
+  return switch (data) {
+    null || _NoneResponse() => [SizedBox()],
+    _ErrorResponse(message: final msg) => [
+        Text("An error occured: $msg"),
+        SizedBox(height: 16.0)
+      ],
+    _SuccessResponse() => [Text("Account created!"), SizedBox(height: 16.0)],
+  };
 }
 
 class RegisterPage extends StatelessWidget {
@@ -97,40 +110,44 @@ class RegisterPage extends StatelessWidget {
 
   const RegisterPage({super.key, required this.config});
 
+  void _gotoLogin(BuildContext context) {
+    Navigator.pushReplacement(
+      context,
+      MaterialPageRoute(
+        builder: (BuildContext context) => LoginPage(config: config),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
-    return ChangeNotifierProvider(
-      create: (_) => RegisterState(apiUrl: config.apiUrl),
-      child: Scaffold(
-        body: Center(
-          child: ConstrainedBox(
-            constraints: BoxConstraints.loose(Size(1000.0, double.infinity)),
-            child: Padding(
-              padding: EdgeInsets.all(16.0),
-              child: Column(
+    return PageScaffold(
+      child: ChangeNotifierProvider(
+        create: (_) => _State(apiUrl: config.apiUrl),
+        builder: (context, _) {
+          return FutureBuilder(
+            future: Provider.of<_State>(context).future,
+            builder: (context, snapshot) {
+              if (snapshot.connectionState == ConnectionState.waiting) {
+                return CircularProgressIndicator();
+              }
+              return Column(
                 mainAxisAlignment: MainAxisAlignment.center,
                 children: <Widget>[
                   Logo(),
                   SizedBox(height: 16.0),
-                  _RegisterForm(),
+                  _Form(),
                   SizedBox(height: 16.0),
+                  ..._displayedResponse(snapshot.data),
                   OutlinedButton(
+                    onPressed: () => _gotoLogin(context),
                     child: Text("I already have an account"),
-                    onPressed: () {
-                      Navigator.pushReplacement(
-                        context,
-                        MaterialPageRoute(
-                          builder: (BuildContext context) =>
-                              LoginPage(config: config),
-                        ),
-                      );
-                    },
                   ),
                 ],
-              ),
-            ),
-          ),
-        ),
+              );
+            },
+          );
+        },
       ),
     );
   }

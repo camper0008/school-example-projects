@@ -89,7 +89,11 @@ async function main() {
         (await login(db, req)).match(
             (token) => {
                 tokens.push(token);
-                ctx.response.body = { ok: true, message: "success", token };
+                ctx.response.body = {
+                    ok: true,
+                    message: "success",
+                    token: token.value,
+                };
             },
             (err) => ctx.response.body = { ok: false, message: err },
         );
