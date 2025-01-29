@@ -33,7 +33,7 @@ class _Form extends StatelessWidget {
           obscureText: true,
           controller: password),
       SizedBox(height: 16.0),
-      Consumer<_RegisterRequest>(
+      Consumer<_LoginRequest>(
         builder: (context, value, child) {
           return FilledButton(
             child: child,
@@ -78,11 +78,11 @@ final class _Success extends _Response {
   _Success({required this.token});
 }
 
-class _RegisterRequest extends ChangeNotifier {
+class _LoginRequest extends ChangeNotifier {
   _Response response = _Unitialized();
   final String apiUrl;
 
-  _RegisterRequest({required this.apiUrl});
+  _LoginRequest({required this.apiUrl});
 
   _Response _parseResponse(http.Response response) {
     return _Response.fromJson(
@@ -119,10 +119,9 @@ class LoginPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return PageScaffold(
       child: ChangeNotifierProvider(
-        create: (_) => _RegisterRequest(apiUrl: config.apiUrl),
+        create: (_) => _LoginRequest(apiUrl: config.apiUrl),
         builder: (context, _) {
-          final status =
-              switch (Provider.of<_RegisterRequest>(context).response) {
+          final status = switch (Provider.of<_LoginRequest>(context).response) {
             _Unitialized() => SizedBox(),
             _Loading() => CircularProgressIndicator(),
             _Error(message: final message) =>
