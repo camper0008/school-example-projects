@@ -52,5 +52,6 @@ class Authentication extends ChangeNotifier {
 
   void logout() {
     status = LoggedOut();
+    notifyListeners();
   }
 }

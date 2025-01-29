@@ -32,14 +32,20 @@ class _Form extends StatelessWidget {
           controller: password),
       SizedBox(height: 16.0),
       Consumer<Authentication>(
-        builder: (context, value, child) {
-          return FilledButton(
-            child: child,
-            onPressed: () {
-              final auth = context.read<Authentication>();
-              auth.login(username: username.text, password: password.text);
-            },
-          );
+        builder: (context, auth, child) {
+          if (auth.status case Loading()) {
+            return FilledButton(
+              onPressed: null,
+              child: child,
+            );
+          } else {
+            return FilledButton(
+              onPressed: () {
+                auth.login(username: username.text, password: password.text);
+              },
+              child: child,
+            );
+          }
         },
         child: Padding(
           padding: EdgeInsets.all(8.0),

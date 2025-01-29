@@ -1,10 +1,12 @@
 import 'dart:convert';
 
+import 'package:animal_farm/authentication.dart';
 import 'package:animal_farm/logo.dart';
 import 'package:http/http.dart' as http;
 import 'package:animal_farm/config.dart';
 import 'package:animal_farm/page_scaffold.dart';
 import 'package:flutter/material.dart';
+import 'package:provider/provider.dart';
 
 sealed class _Response {
   static fromJson(Map<String, dynamic> body) {
@@ -85,7 +87,20 @@ class _AnimalPageState extends State<AnimalPage> {
             children: <Widget>[
               Logo(),
               SizedBox(height: 16.0),
-              ..._displayedResponse(snapshot.data)
+              ..._displayedResponse(snapshot.data),
+              SizedBox(height: 16.0),
+              FilledButton(
+                onPressed: () {
+                  context.read<Authentication>().logout();
+                },
+                child: Padding(
+                  padding: EdgeInsets.all(8.0),
+                  child: Text(
+                    "Logout",
+                    style: TextStyle(fontSize: 20.0),
+                  ),
+                ),
+              ),
             ],
           );
         },

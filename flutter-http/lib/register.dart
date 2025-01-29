@@ -33,13 +33,20 @@ class _Form extends StatelessWidget {
           controller: password),
       SizedBox(height: 16.0),
       Consumer<_RegisterRequest>(
-        builder: (context, value, child) {
-          return FilledButton(
-            child: child,
-            onPressed: () {
-              value.register(username.text, password.text);
-            },
-          );
+        builder: (context, request, child) {
+          if (request.status case _Loading()) {
+            return FilledButton(
+              onPressed: null,
+              child: child,
+            );
+          } else {
+            return FilledButton(
+              onPressed: () {
+                request.register(username.text, password.text);
+              },
+              child: child,
+            );
+          }
         },
         child: Padding(
           padding: EdgeInsets.all(8.0),
@@ -75,7 +82,7 @@ final class _Error extends _Response {
 final class _Success extends _Response {}
 
 class _RegisterRequest extends ChangeNotifier {
-  _Response response = _Unitialized();
+  _Response status = _Unitialized();
   final String apiUrl;
 
   _RegisterRequest({required this.apiUrl});
@@ -87,9 +94,9 @@ class _RegisterRequest extends ChangeNotifier {
 
   void register(String username, String password) async {
     final body = json.encode({"username": username, "password": password});
-    response = _Loading();
+    status = _Loading();
     notifyListeners();
-    response = await http
+    status = await http
         .post(Uri.parse("$apiUrl/register"),
             headers: {"Content-Type": "application/json"}, body: body)
         .then(_parseResponse);
@@ -112,8 +119,7 @@ class RegisterPage extends StatelessWidget {
       child: ChangeNotifierProvider(
         create: (_) => _RegisterRequest(apiUrl: config.apiUrl),
         builder: (context, _) {
-          final status =
-              switch (Provider.of<_RegisterRequest>(context).response) {
+          final status = switch (context.watch<_RegisterRequest>().status) {
             _Unitialized() => SizedBox(),
             _Loading() => CircularProgressIndicator(),
             _Error(message: final message) =>
