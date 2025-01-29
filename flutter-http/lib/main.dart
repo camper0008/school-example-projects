@@ -1,6 +1,9 @@
+import 'package:animal_farm/animal.dart';
 import 'package:animal_farm/config.dart';
+import 'package:animal_farm/authentication.dart';
 import 'package:flutter/material.dart';
 import 'package:animal_farm/login.dart';
+import 'package:provider/provider.dart';
 
 void main() {
   runApp(const App());
@@ -15,11 +18,19 @@ class App extends StatelessWidget {
 
     return MaterialApp(
       title: 'Animal Farm',
-      theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.deepPurple),
-        useMaterial3: true,
+      theme: ThemeData(useMaterial3: true),
+      home: ChangeNotifierProvider(
+        create: (_) => Authentication(config: config),
+        builder: (context, _) {
+          final session = context.watch<Authentication>();
+          switch (session.status) {
+            case LoggedIn(token: final token):
+              return AnimalPage(config: config, token: token);
+            default:
+              return LoginPage(config: config);
+          }
+        },
       ),
-      home: LoginPage(config: config),
     );
   }
 }

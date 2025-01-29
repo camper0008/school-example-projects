@@ -76,9 +76,15 @@ async function main() {
     const router = new Router();
 
     router.post("/register", async (ctx) => {
-        const req: RegisterRequest = await ctx.request.body.json();
+        const req: RegisterRequest = await ctx.request.body
+            .json();
+        if (!req.username || !req.password) {
+            ctx.response.body = { ok: false, message: "Invalid request body" };
+            return;
+        }
+
         const res = (await register(db, req)).match(
-            (_ok) => ({ ok: true, message: "success" }),
+            (_ok) => ({ ok: true, message: "Success" }),
             (err) => ({ ok: false, message: err }),
         );
         ctx.response.body = res;
@@ -86,12 +92,16 @@ async function main() {
 
     router.post("/login", async (ctx) => {
         const req: LoginRequest = await ctx.request.body.json();
+        if (!req.username || !req.password) {
+            ctx.response.body = { ok: false, message: "Invalid request body" };
+            return;
+        }
         (await login(db, req)).match(
             (token) => {
                 tokens.push(token);
                 ctx.response.body = {
                     ok: true,
-                    message: "success",
+                    message: "Success",
                     token: token.value,
                 };
             },
@@ -101,6 +111,10 @@ async function main() {
 
     router.post("/animal", async (ctx) => {
         const req: AnimalRequest = await ctx.request.body.json();
+        if (!req.token) {
+            ctx.response.body = { ok: false, message: "Invalid request body" };
+            return;
+        }
         const res = animal(db, tokens, req).match(
             (animal) => ({ ok: true, message: "success", animal }),
             (err) => ({ ok: false, message: err }),

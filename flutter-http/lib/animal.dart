@@ -49,7 +49,7 @@ class _AnimalPageState extends State<AnimalPage> {
   initState() {
     final body = json.encode({"token": widget.token});
     _animal = http
-        .post(Uri.parse("${widget.config.apiUrl}/login"),
+        .post(Uri.parse("${widget.config.apiUrl}/animal"),
             headers: {"Content-Type": "application/json"}, body: body)
         .then(_parseResponse);
     super.initState();

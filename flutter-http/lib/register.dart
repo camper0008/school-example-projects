@@ -1,7 +1,6 @@
 import 'dart:convert';
 
 import 'package:animal_farm/config.dart';
-import 'package:animal_farm/login.dart';
 import 'package:animal_farm/logo.dart';
 import 'package:animal_farm/page_scaffold.dart';
 import 'package:flutter/material.dart';
@@ -104,12 +103,7 @@ class RegisterPage extends StatelessWidget {
   const RegisterPage({super.key, required this.config});
 
   void _gotoLogin(BuildContext context) {
-    Navigator.pushReplacement(
-      context,
-      MaterialPageRoute(
-        builder: (BuildContext context) => LoginPage(config: config),
-      ),
-    );
+    Navigator.pop(context);
   }
 
   @override
