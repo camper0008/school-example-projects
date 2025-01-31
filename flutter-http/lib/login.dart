@@ -1,8 +1,7 @@
-import 'package:animal_farm/config.dart';
 import 'package:animal_farm/register.dart';
 import 'package:animal_farm/logo.dart';
 import 'package:animal_farm/page_scaffold.dart';
-import 'package:animal_farm/authentication.dart';
+import 'package:animal_farm/session.dart' as session;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
@@ -31,21 +30,16 @@ class _Form extends StatelessWidget {
           obscureText: true,
           controller: password),
       SizedBox(height: 16.0),
-      Consumer<Authentication>(
+      Consumer<session.Session>(
         builder: (context, auth, child) {
-          if (auth.status case Loading()) {
-            return FilledButton(
-              onPressed: null,
-              child: child,
-            );
-          } else {
-            return FilledButton(
-              onPressed: () {
-                auth.login(username: username.text, password: password.text);
-              },
-              child: child,
-            );
-          }
+          final onPressed = auth.status is! session.Loading
+              ? () =>
+                  auth.login(username: username.text, password: password.text)
+              : null;
+          return FilledButton(
+            onPressed: onPressed,
+            child: child,
+          );
         },
         child: Padding(
           padding: EdgeInsets.all(8.0),
@@ -60,29 +54,29 @@ class _Form extends StatelessWidget {
 }
 
 class LoginPage extends StatelessWidget {
-  final Config config;
-
-  const LoginPage({super.key, required this.config});
+  const LoginPage({
+    super.key,
+  });
 
   void _gotoRegister(BuildContext context) {
     Navigator.push(
       context,
       MaterialPageRoute(
-        builder: (BuildContext context) => RegisterPage(config: config),
+        builder: (BuildContext context) => RegisterPage(),
       ),
     );
   }
 
-  Widget _renderStatus(AuthenticationStatus status) {
+  Widget _renderStatus(session.Status status) {
     switch (status) {
-      case LoggedOut():
+      case session.LoggedOut():
         return SizedBox();
-      case Loading():
+      case session.Loading():
         return CircularProgressIndicator();
-      case Error(message: final message):
+      case session.Error(message: final message):
         return Text("An error occurred: $message");
-      case LoggedIn():
-        return Text("Logged in!");
+      case session.LoggedIn():
+        return throw Exception("unreachable");
     }
   }
 
@@ -96,7 +90,7 @@ class LoginPage extends StatelessWidget {
           SizedBox(height: 16.0),
           _Form(),
           SizedBox(height: 16.0),
-          Consumer<Authentication>(builder: (context, auth, child) {
+          Consumer<session.Session>(builder: (context, auth, child) {
             return _renderStatus(auth.status);
           }),
           SizedBox(height: 16.0),

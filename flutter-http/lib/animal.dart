@@ -1,38 +1,26 @@
-import 'dart:convert';
-
-import 'package:animal_farm/authentication.dart';
+import 'package:animal_farm/client.dart' as client;
+import 'package:animal_farm/session.dart' as session;
 import 'package:animal_farm/logo.dart';
-import 'package:http/http.dart' as http;
-import 'package:animal_farm/config.dart';
 import 'package:animal_farm/page_scaffold.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 
-sealed class _Response {
-  static fromJson(Map<String, dynamic> body) {
-    if (body["ok"]) {
-      return _SuccessResponse(animal: body["animal"]);
-    } else {
-      return _ErrorResponse(message: body["message"]);
-    }
-  }
-}
+sealed class _Status {}
 
-final class _ErrorResponse extends _Response {
+final class _Error extends _Status {
   final String message;
-  _ErrorResponse({required this.message});
+  _Error({required this.message});
 }
 
-final class _SuccessResponse extends _Response {
+final class _Success extends _Status {
   final String animal;
-  _SuccessResponse({required this.animal});
+  _Success({required this.animal});
 }
 
 class AnimalPage extends StatefulWidget {
-  const AnimalPage({super.key, required this.config, required this.token});
+  const AnimalPage({super.key, required this.token});
 
   final String token;
-  final Config config;
 
   @override
   State<StatefulWidget> createState() {
@@ -43,35 +31,20 @@ class AnimalPage extends StatefulWidget {
 class _AnimalPageState extends State<AnimalPage> {
   _AnimalPageState();
 
-  _Response _parseResponse(http.Response response) {
-    return _Response.fromJson(jsonDecode(response.body));
-  }
-
   @override
   initState() {
-    final body = json.encode({"token": widget.token});
-    _animal = http
-        .post(Uri.parse("${widget.config.apiUrl}/animal"),
-            headers: {"Content-Type": "application/json"}, body: body)
-        .then(_parseResponse);
+    _animal = client.Client()
+        .animal(widget.token)
+        .then((response) => switch (response) {
+              client.Success<String>(data: final animal) =>
+                _Success(animal: animal),
+              client.Error<String>(message: final message) =>
+                _Error(message: message),
+            });
     super.initState();
   }
 
-  List<Widget> _displayedResponse(_Response? data) {
-    return switch (data) {
-      null => [SizedBox()],
-      _ErrorResponse(message: final msg) => [
-          Text("An error occured: $msg"),
-          SizedBox(height: 16.0)
-        ],
-      _SuccessResponse(animal: final animal) => [
-          Text("You are a $animal!"),
-          SizedBox(height: 16.0)
-        ],
-    };
-  }
-
-  late final Future<_Response> _animal;
+  late final Future<_Status> _animal;
 
   @override
   Widget build(BuildContext context) {
@@ -87,11 +60,16 @@ class _AnimalPageState extends State<AnimalPage> {
             children: <Widget>[
               Logo(),
               SizedBox(height: 16.0),
-              ..._displayedResponse(snapshot.data),
-              SizedBox(height: 16.0),
+              switch (snapshot.data) {
+                null => throw Exception("unreachable"),
+                _Error(message: final message) =>
+                  Text("An error occurred: $message"),
+                _Success(animal: final animal) => Text("You are a $animal!"),
+              },
+              SizedBox(height: 32.0),
               FilledButton(
                 onPressed: () {
-                  context.read<Authentication>().logout();
+                  context.read<session.Session>().logout();
                 },
                 child: Padding(
                   padding: EdgeInsets.all(8.0),

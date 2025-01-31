@@ -1,11 +1,8 @@
-import 'dart:convert';
-
-import 'package:animal_farm/config.dart';
+import 'package:animal_farm/client.dart' as client;
 import 'package:animal_farm/logo.dart';
 import 'package:animal_farm/page_scaffold.dart';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
-import 'package:http/http.dart' as http;
 
 class _Form extends StatelessWidget {
   _Form();
@@ -34,19 +31,13 @@ class _Form extends StatelessWidget {
       SizedBox(height: 16.0),
       Consumer<_RegisterRequest>(
         builder: (context, request, child) {
-          if (request.status case _Loading()) {
-            return FilledButton(
-              onPressed: null,
-              child: child,
-            );
-          } else {
-            return FilledButton(
-              onPressed: () {
-                request.register(username.text, password.text);
-              },
-              child: child,
-            );
-          }
+          final onPressed = request.status is! _Loading
+              ? () => request.register(username.text, password.text)
+              : null;
+          return FilledButton(
+            onPressed: onPressed,
+            child: child,
+          );
         },
         child: Padding(
           padding: EdgeInsets.all(8.0),
@@ -60,54 +51,38 @@ class _Form extends StatelessWidget {
   }
 }
 
-sealed class _Response {
-  static fromJson(Map<String, dynamic> body) {
-    if (body["ok"]) {
-      return _Success();
-    } else {
-      return _Error(message: body["message"]);
-    }
-  }
-}
+sealed class _Status {}
 
-final class _Unitialized extends _Response {}
-
-final class _Loading extends _Response {}
-
-final class _Error extends _Response {
+final class _Error extends _Status {
   final String message;
   _Error({required this.message});
 }
 
-final class _Success extends _Response {}
+final class _Loading extends _Status {}
+
+final class _Success extends _Status {}
 
 class _RegisterRequest extends ChangeNotifier {
-  _Response status = _Unitialized();
-  final String apiUrl;
+  _RegisterRequest();
 
-  _RegisterRequest({required this.apiUrl});
-
-  _Response _parseResponse(http.Response response) {
-    return _Response.fromJson(
-        jsonDecode(response.body) as Map<String, dynamic>);
-  }
+  _Status? status;
 
   void register(String username, String password) async {
-    final body = json.encode({"username": username, "password": password});
     status = _Loading();
     notifyListeners();
-    status = await http
-        .post(Uri.parse("$apiUrl/register"),
-            headers: {"Content-Type": "application/json"}, body: body)
-        .then(_parseResponse);
+    final res = await client.Client().register(username, password);
+    status = switch (res) {
+      client.Success<Null>() => _Success(),
+      client.Error<Null>(message: final message) => _Error(message: message),
+    };
     notifyListeners();
   }
 }
 
 class RegisterPage extends StatelessWidget {
-  final Config config;
-
-  const RegisterPage({super.key, required this.config});
+  const RegisterPage({
+    super.key,
+  });
 
   void _gotoLogin(BuildContext context) {
     Navigator.pop(context);
@@ -117,10 +92,10 @@ class RegisterPage extends StatelessWidget {
   Widget build(BuildContext context) {
     return PageScaffold(
       child: ChangeNotifierProvider(
-        create: (_) => _RegisterRequest(apiUrl: config.apiUrl),
+        create: (_) => _RegisterRequest(),
         builder: (context, _) {
           final status = switch (context.watch<_RegisterRequest>().status) {
-            _Unitialized() => SizedBox(),
+            null => SizedBox(),
             _Loading() => CircularProgressIndicator(),
             _Error(message: final message) =>
               Text("An error occurred: $message"),
