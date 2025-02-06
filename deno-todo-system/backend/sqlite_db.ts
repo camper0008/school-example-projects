@@ -1,6 +1,7 @@
 import * as sqlite from "@db/sqlite";
 import { Db, Todo, User } from "./db.ts";
 import { makeId } from "./make_id.ts";
+import { HashedPassword } from "./hashed_password.ts";
 
 export class SqliteDb implements Db {
   private connection: sqlite.Database;
@@ -27,11 +28,11 @@ export class SqliteDb implements Db {
     return user;
   }
 
-  createUser(username: string, password: string): void {
+  createUser(username: string, password: HashedPassword): void {
     this.connection.prepare("INSERT INTO user(id, username, password)").run(
       makeId(),
       username,
-      password,
+      password.value,
     );
   }
   createTodo(owner: string, text: string): Todo {

@@ -1,7 +1,7 @@
-import { hash, verify } from "@felix/bcrypt";
 import { Sessions, Token } from "./sessions.ts";
 import { Db, Todo } from "./db.ts";
 import { Result } from "./result.ts";
+import { HashedPassword } from "./hashed_password.ts";
 
 type UserInput = {
   username: string;
@@ -19,7 +19,7 @@ export async function register(
       error: "username taken",
     };
   }
-  const hashedPassword = await hash(password);
+  const hashedPassword = await HashedPassword.hash(password);
   db.createUser(username, hashedPassword);
   return {
     ok: true,
@@ -36,7 +36,10 @@ export async function login(
   if (existingUser === null) {
     return { ok: false, error: "invalid username or password" };
   }
-  const isValid = await verify(password, existingUser.password);
+  const isValid = await HashedPassword.verify({
+    unhashed: password,
+    hashed: existingUser.password,
+  });
   if (!isValid) {
     return { ok: false, error: "invalid username or password" };
   }
