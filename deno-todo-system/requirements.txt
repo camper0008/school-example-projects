@@ -1,0 +1,6 @@
+- register
+- login
+- create todo
+- delete todo
+- edit todo
+- view todos

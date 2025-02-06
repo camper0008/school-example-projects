@@ -1,0 +1,11 @@
+{
+  "tasks": {
+    "dev": "deno run --watch main.ts"
+  },
+  "imports": {
+    "@db/sqlite": "jsr:@db/sqlite@^0.12.0",
+    "@felix/bcrypt": "jsr:@felix/bcrypt@^1.0.5",
+    "@oak/oak": "jsr:@oak/oak@^17.1.4",
+    "cors": "https://deno.land/x/cors@v1.2.2/mod.ts"
+  }
+}
