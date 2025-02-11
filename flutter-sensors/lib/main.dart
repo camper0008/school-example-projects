@@ -1,5 +1,5 @@
 import 'package:flutter/material.dart';
-import 'package:flutter_sensors/answer_page.dart';
+import 'package:flutter_sensors/question_dialog.dart';
 
 void main() {
   runApp(const MyApp());
@@ -44,7 +44,7 @@ class _HomePageState extends State<HomePage> {
                 final result = await showQuestionDialog(
                   context: context,
                   question: "What is the airspeed of an unladen swallow?",
-                  answers: (
+                  answers: Answers(
                     Answer("top left (correct)", correct: true),
                     Answer("top right", correct: false),
                     Answer("bottom left (correct)", correct: true),

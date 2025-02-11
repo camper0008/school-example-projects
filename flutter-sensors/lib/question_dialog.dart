@@ -19,12 +19,21 @@ class AnsweredQuestion extends QuestionResult {
   AnsweredQuestion(this.correct);
 }
 
+class Answers {
+  final Answer topLeft;
+  final Answer topRight;
+  final Answer bottomLeft;
+  final Answer bottomRight;
+
+  Answers(this.topLeft, this.topRight, this.bottomLeft, this.bottomRight);
+}
+
 class TimeoutReached extends QuestionResult {}
 
 Future<QuestionResult> showQuestionDialog(
     {required BuildContext context,
     required String question,
-    required (Answer, Answer, Answer, Answer) answers}) async {
+    required Answers answers}) async {
   final value = await Navigator.push<QuestionResult>(
     context,
     MaterialPageRoute(
@@ -44,7 +53,7 @@ class _QuestionDialog extends StatefulWidget {
   const _QuestionDialog({required this.question, required this.answers});
 
   final String question;
-  final (Answer, Answer, Answer, Answer) answers;
+  final Answers answers;
 
   @override
   State<_QuestionDialog> createState() => _QuestionDialogState();
@@ -126,12 +135,15 @@ class Vec2d {
 class _QuestionDialogState extends State<_QuestionDialog> {
   Vec2d ptr = Vec2d.zero();
   Vec2d rotation = Vec2d.zero();
+  int secondsLeftToAnswer = 90;
 
+  late final Timer _answerTimer;
   late final Timer _lerpTimer;
+  late final StreamSubscription _gyroscopeSubscription;
 
   @override
   void initState() {
-    gyroscopeEventStream().listen(
+    _gyroscopeSubscription = gyroscopeEventStream().listen(
       (GyroscopeEvent event) {
         rotation = Vec2d(x: rotation.x + event.y, y: rotation.y + event.x);
       },
@@ -139,124 +151,161 @@ class _QuestionDialogState extends State<_QuestionDialog> {
       cancelOnError: true,
     );
     _lerpTimer = Timer.periodic(Duration(milliseconds: 33), (_) => _lerpPtr());
+    _answerTimer = Timer.periodic(
+      Duration(seconds: 1),
+      (timer) {
+        setState(() {
+          secondsLeftToAnswer -= 1;
+        });
+        if (secondsLeftToAnswer == 0) {
+          _timeoutReached();
+        }
+      },
+    );
     super.initState();
   }
 
-  double _lerp(double pos, double tgt, double alpha) {
+  double _lerpDouble(double pos, double tgt, double alpha) {
     return (tgt - pos) * alpha + pos;
   }
 
   void _lerpPtr() {
     setState(() {
       ptr = Vec2d(
-          x: _lerp(ptr.x, rotation.x, 0.1), y: _lerp(ptr.y, rotation.y, 0.1));
+        x: _lerpDouble(ptr.x, rotation.x, 0.1),
+        y: _lerpDouble(ptr.y, rotation.y, 0.1),
+      );
     });
   }
 
   @override
   void dispose() {
     _lerpTimer.cancel();
+    _answerTimer.cancel();
+    _gyroscopeSubscription.cancel();
     super.dispose();
+  }
+
+  bool _isAnswerCorrect() {
+    bool correct;
+    if (ptr.x <= 0 && ptr.y <= 0) {
+      correct = widget.answers.topLeft.correct;
+    } else if (ptr.x <= 0 && ptr.y > 0) {
+      correct = widget.answers.bottomLeft.correct;
+    } else if (ptr.x > 0 && ptr.y <= 0) {
+      correct = widget.answers.topRight.correct;
+    } else if (ptr.x > 0 && ptr.y > 0) {
+      correct = widget.answers.bottomRight.correct;
+    } else {
+      throw Exception("unreachable");
+    }
+    return correct;
+  }
+
+  void _timeoutReached() {
+    final result = TimeoutReached();
+    return Navigator.of(context).pop(result);
+  }
+
+  void _lockAnswerIn() {
+    final result = AnsweredQuestion(_isAnswerCorrect());
+    return Navigator.of(context).pop(result);
   }
 
   @override
   Widget build(BuildContext context) {
-    final spacing = 32.0;
-    final (topLeft, topRight, bottomLeft, bottomRight) = widget.answers;
-    return Scaffold(
-      body: GestureDetector(
-        onTap: () {
-          bool correct;
-          if (ptr.x <= 0 && ptr.y <= 0) {
-            correct = topLeft.correct;
-          } else if (ptr.x <= 0 && ptr.y > 0) {
-            correct = bottomLeft.correct;
-          } else if (ptr.x > 0 && ptr.y <= 0) {
-            correct = topRight.correct;
-          } else if (ptr.x > 0 && ptr.y > 0) {
-            correct = bottomRight.correct;
-          } else {
-            throw Exception("unreachable");
-          }
-          Navigator.of(context).pop(AnsweredQuestion(correct));
-        },
-        child: Column(
-          children: [
-            SafeArea(
-              child: Padding(
+    return GestureDetector(
+      onTap: () => _lockAnswerIn(),
+      child: Scaffold(
+        body: SafeArea(
+          child: Column(
+            children: [
+              Padding(
                 padding: EdgeInsets.all(16.0),
                 child: Text(
-                  widget.question,
+                  "${widget.question} ($secondsLeftToAnswer)",
                   style: TextStyle(fontSize: 24.0),
                 ),
               ),
-            ),
-            Expanded(
-              child: Stack(
-                children: [
-                  Center(
-                    child: Padding(
-                      padding: EdgeInsets.all(8.0),
-                      child: Row(
-                        spacing: spacing,
-                        children: [
-                          Expanded(
-                            child: Column(
-                              spacing: spacing,
-                              children: [
-                                Expanded(
-                                  child: _Answer(
-                                    text: topLeft.text,
-                                    highlighted: ptr.x <= 0 && ptr.y <= 0,
-                                  ),
-                                ),
-                                Expanded(
-                                  child: _Answer(
-                                    text: bottomLeft.text,
-                                    highlighted: ptr.x <= 0 && ptr.y > 0,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                          Expanded(
-                            child: Column(
-                              spacing: spacing,
-                              children: [
-                                Expanded(
-                                  child: _Answer(
-                                    text: topRight.text,
-                                    highlighted: ptr.x > 0 && ptr.y <= 0,
-                                  ),
-                                ),
-                                Expanded(
-                                  child: _Answer(
-                                    text: bottomRight.text,
-                                    highlighted: ptr.x > 0 && ptr.y > 0,
-                                  ),
-                                ),
-                              ],
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ),
-                  _Pointer(x: ptr.x, y: ptr.y)
-                ],
-              ),
-            ),
-            SafeArea(
-              child: Padding(
+              _AnswersScreen(answers: widget.answers, ptr: ptr),
+              Padding(
                 padding: EdgeInsets.all(16.0),
                 child: Text(
                   "Tap to lock answer in",
                   style: TextStyle(fontSize: 20.0),
                 ),
               ),
-            ),
-          ],
+            ],
+          ),
         ),
+      ),
+    );
+  }
+}
+
+class _AnswersScreen extends StatelessWidget {
+  const _AnswersScreen({
+    required this.answers,
+    required this.ptr,
+  });
+
+  final double spacing = 32;
+  final Answers answers;
+  final Vec2d ptr;
+
+  Widget _answerColumn({
+    required Answer top,
+    required Answer bottom,
+    required bool highlighted,
+  }) {
+    return Expanded(
+      child: Column(
+        spacing: spacing,
+        children: [
+          Expanded(
+            child: _Answer(
+              text: top.text,
+              highlighted: highlighted && ptr.y <= 0,
+            ),
+          ),
+          Expanded(
+            child: _Answer(
+              text: bottom.text,
+              highlighted: highlighted && ptr.y > 0,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Expanded(
+      child: Stack(
+        children: [
+          Center(
+            child: Padding(
+              padding: EdgeInsets.all(8.0),
+              child: Row(
+                spacing: spacing,
+                children: [
+                  _answerColumn(
+                    top: answers.topLeft,
+                    bottom: answers.bottomLeft,
+                    highlighted: ptr.x <= 0,
+                  ),
+                  _answerColumn(
+                    top: answers.topRight,
+                    bottom: answers.topRight,
+                    highlighted: ptr.x > 0,
+                  ),
+                ],
+              ),
+            ),
+          ),
+          _Pointer(x: ptr.x, y: ptr.y)
+        ],
       ),
     );
   }
