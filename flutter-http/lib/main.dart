@@ -22,7 +22,7 @@ class App extends StatelessWidget {
           final session = context.watch<Session>();
           return switch (session.status) {
             LoggedIn(token: final token) => AnimalPage(token: token),
-            _ => LoginPage(),
+            LoggedOut() => LoginPage(),
           };
         },
       ),

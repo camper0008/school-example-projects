@@ -3,7 +3,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 
 class Client {
-  final _apiUrl = "https://animalfarm.tpho.dk";
+  final _apiUrl = "http://localhost:8080";
 
   Future<http.Response> _post(
       {required String endpoint, required Map<String, dynamic> body}) async {
