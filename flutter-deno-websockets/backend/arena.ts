@@ -1,17 +1,86 @@
 import { assertUnreachable, fatal } from "./assert.ts";
-import { BaseData } from "./battle.ts";
+import { BaseData, Battle } from "./battle.ts";
 
-export class BattlePool {
+export class Fighter {
+    public readonly id: number;
+    private user: User;
+    public available: boolean;
+
+    constructor(id: number, user: User) {
+        this.id = id;
+        this.user = user;
+        this.available = true;
+    }
+
+    name() {
+        return this.user.name();
+    }
+    answer() {
+        return this.user.answer();
+    }
+    connected(): boolean {
+        return this.user.connected();
+    }
+    sendMessage(msg: Response) {
+        this.user.sendMessage(msg);
+    }
+}
+
+type Leaderboard = {
+    [name: string]: number;
+};
+
+export class Arena {
     private idGen: number = 0;
-    private pool: User[] = [];
+    private pool: Fighter[] = [];
+    private battles: Battle[] = [];
+    private leaderboard: Leaderboard = {};
 
-    createId(): number {
+    private createId(): number {
         this.idGen += 1;
         return this.idGen;
     }
 
     connected(user: User) {
-        this.pool.push(user);
+        this.pool.push(
+            new Fighter(
+                this.createId(),
+                user,
+            ),
+        );
+    }
+
+    private checkForNewBattles() {
+        const available = this.pool.filter((user) => user.available);
+        if (available.length > 1) {
+            for (let i = 0; i < available.length; i += 2) {
+                if (i + 1 >= available.length) {
+                    break;
+                }
+                const fighter_0 = available[i];
+                const fighter_1 = available[i + 1];
+
+                const battle = new Battle([fighter_0, fighter_1]);
+                fighter_0.available = false;
+                fighter_1.available = false;
+                this.battles.push(battle);
+            }
+        }
+    }
+
+    private checkForFinishedBattles() {
+        const finished = this.battles
+            .filter((battle) => battle.result !== null);
+        this.battles = this.battles
+            .filter((battle) => battle.result === null);
+
+        finished.forEach((_battle) => {
+        });
+    }
+
+    step() {
+        this.pool = this.pool.filter((fighter) => fighter.connected());
+        this.checkForNewBattles();
     }
 }
 
@@ -21,7 +90,7 @@ type Message =
 
 export type BattleTriviaQuestion = {
     question: string;
-    answers: [string, string, string, string];
+    answers: readonly [string, string, string, string];
 };
 
 export type BattleResponse =
@@ -45,8 +114,8 @@ type UserState =
     | { tag: "none" }
     | { tag: "connected" }
     | { tag: "disconnected_after_connected" }
-    | { tag: "registered"; id: number; name: string }
-    | { tag: "disconnected_after_registered"; id: number; name: string };
+    | { tag: "registered"; name: string }
+    | { tag: "disconnected_after_registered"; name: string };
 
 export type UserAnswerState =
     | { tag: "none" }
@@ -63,12 +132,12 @@ export class User {
     private socket: WebSocket;
 
     private state: UserState;
-    private manager: BattlePool;
+    private arena: Arena;
     private answerState: UserAnswerState;
 
-    constructor(socket: WebSocket, manager: BattlePool) {
+    constructor(socket: WebSocket, manager: Arena) {
         this.socket = socket;
-        this.manager = manager;
+        this.arena = manager;
         this.answerState = { tag: "none" };
         this.state = { tag: "none" };
 
@@ -101,6 +170,20 @@ export class User {
         return this.answerState;
     }
 
+    name(): string {
+        switch (this.state.tag) {
+            case "none":
+            case "connected":
+            case "disconnected_after_connected":
+                return fatal("should never be called before being registered");
+            case "registered":
+            case "disconnected_after_registered":
+                return this.state.name;
+            default:
+                assertUnreachable(this.state);
+        }
+    }
+
     connected(): boolean {
         switch (this.state.tag) {
             case "none":
@@ -124,7 +207,7 @@ export class User {
         }
     }
 
-    private sendMessage(message: Response) {
+    sendMessage(message: Response) {
         this.socket.send(JSON.stringify(message));
     }
 
@@ -133,7 +216,8 @@ export class User {
         this.sendMessage({ tag: "register_name" });
     }
     private socketRegistered(name: string) {
-        this.state = { tag: "registered", id: this.manager.createId(), name };
+        this.state = { tag: "registered", name };
+        this.arena.connected(this);
     }
 
     private socketClosed() {
@@ -148,7 +232,6 @@ export class User {
             case "registered":
                 this.state = {
                     tag: "disconnected_after_registered",
-                    id: this.state.id,
                     name: this.state.name,
                 };
                 break;

@@ -1,5 +1,4 @@
-import { fatal } from "./assert.ts";
-import { User } from "./sockets.ts";
+import { Fighter } from "./arena.ts";
 import { Trivia, TriviaGenerator } from "./trivia.ts";
 
 type Question = {
@@ -104,14 +103,13 @@ export type BaseData = {
     soldiers: SoldierData[];
 };
 
-type Fighter = {
-    socket: User;
+type FighterExt = {
+    fighter: Fighter;
     base: Base;
 };
 
 type BattleResult =
-    | { tag: "firstWon" }
-    | { tag: "secondWon" }
+    | { tag: "done"; winner: Fighter["id"]; loser: Fighter["id"] }
     | { tag: "tie" };
 
 async function wait(seconds: number): Promise<void> {
@@ -134,18 +132,20 @@ type BattleState =
 export class Battle {
     private state: BattleState;
     private triviaGenerator: TriviaGenerator;
-    private fighters: [Fighter, Fighter];
+    private fighters: [FighterExt, FighterExt];
+    public result: BattleResult | null;
 
-    constructor(fighters: [User, User]) {
+    constructor(fighters: [Fighter, Fighter]) {
+        this.result = null;
         this.state = { tag: "idle", countdown: 10 };
         this.triviaGenerator = new TriviaGenerator();
         this.fighters = [
-            { socket: fighters[0], base: new Base() },
-            { socket: fighters[1], base: new Base() },
+            { fighter: fighters[0], base: new Base() },
+            { fighter: fighters[1], base: new Base() },
         ];
     }
 
-    private askQuestion(state: BattleStateIdle) {
+    private askQuestion(_state: BattleStateIdle) {
         this.state = {
             tag: "question_asked",
             countdown: 60,
@@ -160,7 +160,7 @@ export class Battle {
         };
     }
 
-    private questionAnswered(state: BattleStateQuestionAsked) {
+    private questionAnswered(state: BattleStateQuestionAsked): false {
         const correctAnswers = state.question.trivia.answers
             .map((answer, idx) => [idx, answer[1]] as const)
             .filter(([_idx, correct]) => correct)
@@ -179,13 +179,15 @@ export class Battle {
         });
 
         this.state = { tag: "idle", countdown: 5 };
+
+        return false;
     }
 
     private stepQuestionAsked(
         state: BattleStateQuestionAsked,
-    ) {
+    ): false {
         this.fighters.forEach((fighter, i) => {
-            const answer = fighter.socket.answer();
+            const answer = fighter.fighter.answer();
             if (answer.tag === "requested_answer") {
                 return;
             }
@@ -197,14 +199,46 @@ export class Battle {
             .every((answer) => answer !== null);
 
         if (timeoutReached || everybodyAnswered) {
-            this.questionAnswered(state);
+            return this.questionAnswered(state);
         }
+
+        this.fighters.forEach(({ fighter }, i) => {
+            const waitingOnEnemy = state.question.answers[i] !== null;
+
+            const question = {
+                question: state.question.trivia.question,
+                answers: [
+                    state.question.trivia.answers[0][0],
+                    state.question.trivia.answers[1][0],
+                    state.question.trivia.answers[2][0],
+                    state.question.trivia.answers[3][0],
+                ] as const,
+            };
+
+            const battle = waitingOnEnemy
+                ? {
+                    tag: "question_waiting_on_enemy" as const,
+                }
+                : {
+                    tag: "question" as const,
+                    question,
+                };
+
+            fighter.sendMessage({
+                tag: "battle",
+                battle: {
+                    ...battle,
+                    countdown: state.countdown,
+                },
+            });
+        });
+        return false;
     }
 
-    private stepIdle(state: BattleStateIdle): BattleResult | null {
+    private stepIdle(state: BattleStateIdle): boolean {
         if (state.countdown <= 0) {
             this.askQuestion(state);
-            return null;
+            return false;
         }
         const base = [
             this.fighters[0].base,
@@ -216,26 +250,62 @@ export class Battle {
 
         const anyDead = base.some((b) => !b.alive());
         if (anyDead) {
-            const anyAlive = base.some((b) => b.alive());
-            if (!anyAlive) {
-                return { tag: "tie" };
-            } else if (base[0].alive()) {
-                return { tag: "firstWon" };
-            } else if (base[1].alive()) {
-                return { tag: "secondWon" };
+            const allDead = base.every((b) => !b.alive());
+            if (allDead) {
+                this.result = { tag: "tie" };
             } else {
-                fatal("unreachable");
+                const winner = base[0].alive() ? 0 : 1;
+                const loser = base[0].alive() ? 1 : 0;
+                this.result = {
+                    tag: "done",
+                    winner: this.fighters[winner].fighter.id,
+                    loser: this.fighters[loser].fighter.id,
+                };
             }
+            return true;
         }
-        return null;
+
+        this.fighters.forEach(({ fighter, base }, i) => {
+            const enemy = i === 0 ? this.fighters[1] : this.fighters[0];
+            fighter.sendMessage({
+                tag: "battle",
+                battle: {
+                    tag: "idle",
+                    you: base.data(),
+                    enemy: {
+                        name: enemy.fighter.name(),
+                        base: enemy.base.data(),
+                    },
+                },
+            });
+        });
+
+        return false;
     }
 
-    private step(): BattleResult | null {
+    private step(): boolean {
+        const anyDisconnected = this.fighters
+            .some(({ fighter }) => !fighter.connected());
+        if (anyDisconnected) {
+            const allDisconnected = this.fighters
+                .every(({ fighter }) => !fighter.connected());
+            if (allDisconnected) {
+                this.result = { tag: "tie" };
+            } else {
+                const winner = this.fighters[0].fighter.connected() ? 0 : 1;
+                const loser = this.fighters[0].fighter.connected() ? 1 : 0;
+                this.result = {
+                    tag: "done",
+                    winner: this.fighters[winner].fighter.id,
+                    loser: this.fighters[loser].fighter.id,
+                };
+            }
+            return true;
+        }
         this.state.countdown -= 1;
         switch (this.state.tag) {
             case "question_asked": {
-                this.stepQuestionAsked(this.state);
-                return null;
+                return this.stepQuestionAsked(this.state);
             }
             case "idle": {
                 return this.stepIdle(this.state);
@@ -243,14 +313,14 @@ export class Battle {
         }
     }
 
-    async start(): Promise<BattleResult> {
+    async start(): Promise<void> {
         while (true) {
-            const result = this.step();
-            if (!result) {
+            const fightOver = this.step();
+            if (!fightOver) {
                 await wait(1);
                 continue;
             }
-            return result;
+            return;
         }
     }
 }

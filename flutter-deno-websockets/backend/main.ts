@@ -1,7 +1,7 @@
-import { BattlePool, User } from "./sockets.ts";
+import { Arena, User } from "./arena.ts";
 
 function main() {
-    const battle = new BattlePool();
+    const battle = new Arena();
     Deno.serve((req) => {
         if (req.headers.get("upgrade") != "websocket") {
             return new Response(null, { status: 501 });
