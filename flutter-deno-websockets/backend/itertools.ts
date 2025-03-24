@@ -38,7 +38,10 @@ class ItertoolsExt<T> {
         const out: T[] = [];
 
         for (const [index, value] of input.entries()) {
-            if (!predicate(value, index)) this.inner.push(value);
+            if (!predicate(value, index)) {
+                this.inner.push(value);
+                continue;
+            }
             out.push(value);
         }
         return iter(out);

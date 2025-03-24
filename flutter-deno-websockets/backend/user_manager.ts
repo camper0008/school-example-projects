@@ -90,6 +90,7 @@ export class UserManager {
         const candidates = iter(this.registered)
             .extract((user) => user.ready())
             .toList();
+
         for (let i = 0; i < candidates.length; i += 2) {
             if (i % 2 == 0 && i + 1 >= candidates.length) {
                 this.registered.push(candidates[i]);

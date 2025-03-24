@@ -19,11 +19,11 @@ sealed class Battle implements Response {
   static Response fromJson(Map<String, dynamic> obj) {
     switch (obj["tag"]) {
       case "trivia":
-        return Trivia.fromJson(obj);
+        return BattleTrivia.fromJson(obj);
       case "trivia_waiting_on_enemy":
         return TriviaWaitingOnEnemy.fromJson(obj);
       case "idle":
-        return Idle.fromJson(obj);
+        return BattleIdle.fromJson(obj);
       default:
         return Unhandled(jsonEncode(obj));
     }
@@ -60,23 +60,23 @@ class Enemy {
         base = Base.fromJson(obj["base"]);
 }
 
-class Idle extends Battle {
+class BattleIdle extends Battle {
   final int countdown;
   final Base you;
   final Enemy enemy;
 
-  Idle.fromJson(Map<String, dynamic> obj)
+  BattleIdle.fromJson(Map<String, dynamic> obj)
       : countdown = obj["countdown"],
         you = Base.fromJson(obj["you"]),
         enemy = Enemy.fromJson(obj["enemy"]);
 }
 
-class Trivia extends Battle {
+class BattleTrivia extends Battle {
   final int countdown;
   final String question;
   final List<String> answers;
 
-  Trivia.fromJson(Map<String, dynamic> obj)
+  BattleTrivia.fromJson(Map<String, dynamic> obj)
       : countdown = obj["countdown"],
         question = obj["question"],
         answers =

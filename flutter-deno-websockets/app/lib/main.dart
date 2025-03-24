@@ -43,7 +43,7 @@ class LeaderboardPage extends StatelessWidget {
         "Leaderboard",
         style: TextStyle(fontSize: 20.0),
       ),
-      Divider(),
+      if (leaderboard.isNotEmpty) Divider(),
       ...leaderboard.entries
           .map((entry) => Text("${entry.key}: ${entry.value}")),
       Divider(),
@@ -110,12 +110,12 @@ class Soldier extends StatelessWidget {
   }
 }
 
-class TriviaPage extends StatefulWidget {
+class BattleTriviaPage extends StatefulWidget {
   final String question;
   final List<String> answers;
   final int countdown;
   final WebSocketSink sink;
-  const TriviaPage({
+  const BattleTriviaPage({
     super.key,
     required this.sink,
     required this.question,
@@ -124,10 +124,10 @@ class TriviaPage extends StatefulWidget {
   });
 
   @override
-  State<TriviaPage> createState() => _TriviaPageState();
+  State<BattleTriviaPage> createState() => _BattleTriviaPageState();
 }
 
-class _TriviaPageState extends State<TriviaPage> {
+class _BattleTriviaPageState extends State<BattleTriviaPage> {
   bool answered = false;
 
   @override
@@ -156,11 +156,11 @@ class _TriviaPageState extends State<TriviaPage> {
   }
 }
 
-class IdlePage extends StatelessWidget {
+class BattleIdlePage extends StatelessWidget {
   final response.Base you;
   final response.Enemy enemy;
   final int countdown;
-  const IdlePage({
+  const BattleIdlePage({
     super.key,
     required this.you,
     required this.enemy,
@@ -230,25 +230,28 @@ class _PageState extends State<Page> {
               users: final users
             ):
             return LeaderboardPage(
-                leaderboard: leaderboard, you: you, users: users);
+              leaderboard: leaderboard,
+              you: you,
+              users: users,
+            );
           case response.RegisterName():
             return RegisterPage(sink: channel.sink);
           case response.Unhandled(body: final body):
             return Center(
                 child: Text("unhandled: '$body'",
                     style: TextStyle(fontSize: 24.0)));
-          case response.Idle(
+          case response.BattleIdle(
               you: final you,
               enemy: final enemy,
               countdown: final countdown,
             ):
-            return IdlePage(you: you, enemy: enemy, countdown: countdown);
-          case response.Trivia(
+            return BattleIdlePage(you: you, enemy: enemy, countdown: countdown);
+          case response.BattleTrivia(
               countdown: final countdown,
               question: final question,
               answers: final answers,
             ):
-            return TriviaPage(
+            return BattleTriviaPage(
               sink: channel.sink,
               question: question,
               answers: answers,
