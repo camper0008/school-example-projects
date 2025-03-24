@@ -1,7 +1,7 @@
 import 'dart:convert';
 
-sealed class Response {
-  static Response fromJson(Map<String, dynamic> obj) {
+sealed class UI {
+  static UI fromJson(Map<String, dynamic> obj) {
     switch (obj["tag"]) {
       case "register_name":
         return RegisterName();
@@ -15,8 +15,8 @@ sealed class Response {
   }
 }
 
-sealed class Battle implements Response {
-  static Response fromJson(Map<String, dynamic> obj) {
+sealed class Battle implements UI {
+  static UI fromJson(Map<String, dynamic> obj) {
     switch (obj["tag"]) {
       case "trivia":
         return BattleTrivia.fromJson(obj);
@@ -90,7 +90,7 @@ class TriviaWaitingOnEnemy extends Battle {
       : countdown = obj["countdown"];
 }
 
-class Leaderboard implements Response {
+class Leaderboard implements UI {
   final String you;
   final List<String> users;
   final Map<String, int> leaderboard;
@@ -102,9 +102,9 @@ class Leaderboard implements Response {
             .map((key, value) => MapEntry(key, value as int));
 }
 
-class Unhandled implements Response {
+class Unhandled implements UI {
   final String body;
   const Unhandled(this.body);
 }
 
-class RegisterName implements Response {}
+class RegisterName implements UI {}

@@ -2,7 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:web_socket_channel/web_socket_channel.dart';
-import 'package:app/response.dart' as response;
+import 'package:app/ui.dart' as ui;
 
 void main() {
   runApp(App());
@@ -99,7 +99,7 @@ class RegisterPageState extends State<RegisterPage> {
 }
 
 class Soldier extends StatelessWidget {
-  final response.Soldier soldier;
+  final ui.Soldier soldier;
 
   const Soldier(this.soldier, {super.key});
 
@@ -157,8 +157,8 @@ class _BattleTriviaPageState extends State<BattleTriviaPage> {
 }
 
 class BattleIdlePage extends StatelessWidget {
-  final response.Base you;
-  final response.Enemy enemy;
+  final ui.Base you;
+  final ui.Enemy enemy;
   final int countdown;
   const BattleIdlePage({
     super.key,
@@ -222,9 +222,9 @@ class _PageState extends State<Page> {
         if (!snapshot.hasData) {
           return Center(child: CircularProgressIndicator());
         }
-        final value = response.Response.fromJson(jsonDecode(snapshot.data));
+        final value = ui.UI.fromJson(jsonDecode(snapshot.data));
         switch (value) {
-          case response.Leaderboard(
+          case ui.Leaderboard(
               leaderboard: final leaderboard,
               you: final you,
               users: final users
@@ -234,19 +234,22 @@ class _PageState extends State<Page> {
               you: you,
               users: users,
             );
-          case response.RegisterName():
+          case ui.RegisterName():
             return RegisterPage(sink: channel.sink);
-          case response.Unhandled(body: final body):
+          case ui.Unhandled(body: final body):
             return Center(
-                child: Text("unhandled: '$body'",
-                    style: TextStyle(fontSize: 24.0)));
-          case response.BattleIdle(
+              child: Text(
+                "unhandled: '$body'",
+                style: TextStyle(fontSize: 24.0),
+              ),
+            );
+          case ui.BattleIdle(
               you: final you,
               enemy: final enemy,
               countdown: final countdown,
             ):
             return BattleIdlePage(you: you, enemy: enemy, countdown: countdown);
-          case response.BattleTrivia(
+          case ui.BattleTrivia(
               countdown: final countdown,
               question: final question,
               answers: final answers,
@@ -257,10 +260,13 @@ class _PageState extends State<Page> {
               answers: answers,
               countdown: countdown,
             );
-          case response.TriviaWaitingOnEnemy(countdown: final countdown):
+          case ui.TriviaWaitingOnEnemy(countdown: final countdown):
             return Center(
-                child: Text("Waiting on enemy... ($countdown)",
-                    style: TextStyle(fontSize: 24.0)));
+              child: Text(
+                "Waiting on enemy... ($countdown)",
+                style: TextStyle(fontSize: 24.0),
+              ),
+            );
         }
       },
     );
