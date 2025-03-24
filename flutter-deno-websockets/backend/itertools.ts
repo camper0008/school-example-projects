@@ -1,19 +1,3 @@
-function drainReverse<T>(list: T[]): T[] {
-    const result = [];
-    while (true) {
-        const v = list.pop();
-        if (v === undefined) break;
-        result.push(v);
-    }
-    return result;
-}
-
-function drain<T>(list: T[]): T[] {
-    const v = drainReverse(list);
-    v.reverse();
-    return v;
-}
-
 type NonNullable<T> = T extends null | undefined ? never : T;
 
 class ItertoolsExt<T> {
@@ -25,7 +9,7 @@ class ItertoolsExt<T> {
     extractMap<To extends NonNullable<S>, S>(
         predicate: (value: T, index: number) => To | null,
     ): ItertoolsExt<To> {
-        const input = drain(this.inner);
+        const input = this.drain();
         const out: To[] = [];
 
         for (const [index, value] of input.entries()) {
@@ -39,10 +23,18 @@ class ItertoolsExt<T> {
         return iter(out);
     }
 
+    drain(): ItertoolsExt<T> {
+        return iter(this.inner.splice(0, this.inner.length));
+    }
+
+    entries() {
+        return this.inner.entries();
+    }
+
     extract(
         predicate: (value: T, index: number) => boolean,
     ): ItertoolsExt<T> {
-        const input = drain(this.inner);
+        const input = this.drain();
         const out: T[] = [];
 
         for (const [index, value] of input.entries()) {
@@ -55,7 +47,7 @@ class ItertoolsExt<T> {
     filterInPlace(
         predicate: (value: T, index: number) => boolean,
     ): void {
-        const input = drain(this.inner);
+        const input = this.drain();
 
         for (const [index, value] of input.entries()) {
             if (!predicate(value, index)) continue;

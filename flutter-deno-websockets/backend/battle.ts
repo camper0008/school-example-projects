@@ -59,7 +59,7 @@ class Base {
         if (first.health > 0) {
             return;
         }
-        this.soldiers.unshift();
+        this.soldiers.shift();
     }
 
     addSoldier(health: number, damage: number) {
@@ -123,11 +123,6 @@ type AnswerState =
     | { tag: "requested_answer" }
     | { tag: "answered"; answer: 0 | 1 | 2 | 3 };
 
-type TriviaPops = {
-    question: string;
-    answers: readonly [string, string, string, string];
-};
-
 type BattleUserReceive = { tag: "answer"; answer: number };
 
 type BattleUserSendInner =
@@ -137,7 +132,12 @@ type BattleUserSendInner =
         enemy: { name: string; base: BaseData };
         countdown: number;
     }
-    | { tag: "trivia"; trivia: TriviaPops; countdown: number }
+    | {
+        tag: "trivia";
+        question: string;
+        answers: readonly [string, string, string, string];
+        countdown: number;
+    }
     | { tag: "trivia_waiting_on_enemy"; countdown: number };
 
 type BattleUserSend = { tag: "battle"; battle: BattleUserSendInner };
@@ -200,7 +200,7 @@ export class Battle {
     private users: [FightingUser, FightingUser];
 
     constructor(fighters: [FightingUser, FightingUser]) {
-        this.state = { tag: "idle", countdown: 120 };
+        this.state = { tag: "idle", countdown: 10 };
         this.triviaGenerator = new trivia.TriviaGenerator();
         this.users = fighters;
     }
@@ -272,6 +272,10 @@ export class Battle {
             this.askQuestion(state);
             return;
         }
+
+        this.users[0].base.step(this.users[1].base);
+        this.users[1].base.step(this.users[0].base);
+
         const loser = this.users.find(({ base }) => !base.alive());
         if (loser === undefined) {
             return;
@@ -344,15 +348,13 @@ export class Battle {
             const battle = {
                 tag: "trivia",
                 countdown: state.countdown,
-                trivia: {
-                    question: trivia.question,
-                    answers: [
-                        trivia.answers[0].content,
-                        trivia.answers[1].content,
-                        trivia.answers[2].content,
-                        trivia.answers[3].content,
-                    ],
-                },
+                question: trivia.question,
+                answers: [
+                    trivia.answers[0].content,
+                    trivia.answers[1].content,
+                    trivia.answers[2].content,
+                    trivia.answers[3].content,
+                ],
             } as const;
             me.send({
                 tag: "battle",

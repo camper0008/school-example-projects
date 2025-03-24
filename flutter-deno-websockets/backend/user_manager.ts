@@ -87,19 +87,14 @@ export class UserManager {
             const guts = user.dispose();
             return new FightingUser(user.name, guts);
         }
-        if (this.registered.length < 2) {
-            return;
-        }
-        const length = this.registered.length;
         const candidates = iter(this.registered)
-            .extract((_, i) => {
-                if (i % 2 !== 0) {
-                    return true;
-                }
-                return i + 1 < length;
-            })
+            .extract((user) => user.ready())
             .toList();
         for (let i = 0; i < candidates.length; i += 2) {
+            if (i % 2 == 0 && i + 1 >= candidates.length) {
+                this.registered.push(candidates[i]);
+                continue;
+            }
             const left = toFightingUser(candidates[i]);
             const right = toFightingUser(candidates[i + 1]);
             this.fighting.push(left, right);
@@ -124,6 +119,7 @@ export class UserManager {
     }
 
     private step() {
+        this.registered.forEach((user) => user.tick());
         this.battleStep();
         this.notifyBattlesOfDisconnect();
         this.evaluateFinishedBattles();
@@ -219,9 +215,19 @@ type RegisteredUserSend = {
 
 class RegisteredUser extends User<void, RegisteredUserSend> {
     public readonly name: string;
+    private cooldown: number;
 
     constructor(name: string, guts: Guts) {
         super(guts);
         this.name = name;
+        this.cooldown = 10;
+    }
+
+    tick() {
+        this.cooldown -= 1;
+    }
+
+    ready(): boolean {
+        return this.cooldown <= 0;
     }
 }

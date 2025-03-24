@@ -6,7 +6,7 @@ sealed class Response {
       case "register_name":
         return RegisterName();
       case "battle":
-        Battle.fromJson(obj);
+        return Battle.fromJson(obj["battle"]);
       case "leaderboard":
         return Leaderboard.fromJson(obj);
       default:
@@ -19,33 +19,56 @@ sealed class Battle implements Response {
   static Response fromJson(Map<String, dynamic> obj) {
     switch (obj["tag"]) {
       case "trivia":
-        return Trivia.fromJson(obj["battle"]);
+        return Trivia.fromJson(obj);
+      case "trivia_waiting_on_enemy":
+        return TriviaWaitingOnEnemy.fromJson(obj);
       case "idle":
+        return Idle.fromJson(obj);
       default:
         return Unhandled(jsonEncode(obj));
     }
   }
 }
 
-// soldier = { name: string, damage: int, health: int }
+class Soldier {
+  final String name;
+  final int health;
+  final int damage;
+  Soldier.fromJson(Map<String, dynamic> obj)
+      : name = obj["name"],
+        damage = obj["damage"],
+        health = obj["health"];
+}
 
-// {
-//   tag: "idle",
-//   you: {"health": int, soldiers: Soldier[]},
-//   enemy: { name: string, base: { health: int, soldiers: Soldier[] }
-//   countdown: int
-// }
+class Base {
+  final int health;
+  final List<Soldier> soldiers;
+
+  Base.fromJson(Map<String, dynamic> obj)
+      : health = obj["health"],
+        soldiers = (obj["soldiers"] as List<dynamic>)
+            .map((soldier) => Soldier.fromJson(soldier))
+            .toList();
+}
+
+class Enemy {
+  final String name;
+  final Base base;
+
+  Enemy.fromJson(Map<String, dynamic> obj)
+      : name = obj["name"],
+        base = Base.fromJson(obj["base"]);
+}
+
 class Idle extends Battle {
   final int countdown;
-  final String question;
-  final List<String> answers;
+  final Base you;
+  final Enemy enemy;
 
   Idle.fromJson(Map<String, dynamic> obj)
       : countdown = obj["countdown"],
-        question = obj["trivia"]["question"],
-        answers = (obj["trivia"]["answers"] as List<dynamic>)
-            .map((v) => v as String)
-            .toList();
+        you = Base.fromJson(obj["you"]),
+        enemy = Enemy.fromJson(obj["enemy"]);
 }
 
 class Trivia extends Battle {
@@ -55,10 +78,16 @@ class Trivia extends Battle {
 
   Trivia.fromJson(Map<String, dynamic> obj)
       : countdown = obj["countdown"],
-        question = obj["trivia"]["question"],
-        answers = (obj["trivia"]["answers"] as List<dynamic>)
-            .map((v) => v as String)
-            .toList();
+        question = obj["question"],
+        answers =
+            (obj["answers"] as List<dynamic>).map((v) => v as String).toList();
+}
+
+class TriviaWaitingOnEnemy extends Battle {
+  final int countdown;
+
+  TriviaWaitingOnEnemy.fromJson(Map<String, dynamic> obj)
+      : countdown = obj["countdown"];
 }
 
 class Leaderboard implements Response {
