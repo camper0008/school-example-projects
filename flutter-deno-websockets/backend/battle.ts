@@ -1,14 +1,7 @@
-import { Fighter } from "./arena.ts";
-import { Trivia, TriviaGenerator } from "./trivia.ts";
-
-type Question = {
-    trivia: Trivia;
-    soldier: {
-        health: number;
-        damage: number;
-    };
-    answers: [null | 0 | 1 | 2 | 3, null | 0 | 1 | 2 | 3];
-};
+import { assertUnreachable } from "./assert.ts";
+import { iter } from "./itertools.ts";
+import * as trivia from "./trivia.ts";
+import { Guts, User, UserId } from "./user.ts";
 
 const names = [
     "Mikkel",
@@ -103,46 +96,144 @@ export type BaseData = {
     soldiers: SoldierData[];
 };
 
-type FighterExt = {
-    fighter: Fighter;
-    base: Base;
+type Question = {
+    trivia: trivia.Trivia;
+    soldier: {
+        health: number;
+        damage: number;
+    };
 };
-
-type BattleResult =
-    | { tag: "done"; winner: Fighter["id"]; loser: Fighter["id"] }
-    | { tag: "tie" };
-
-async function wait(seconds: number): Promise<void> {
-    return await new Promise((resolve) => {
-        setTimeout(() => resolve(), seconds * 1000);
-    });
-}
 
 type BattleStateQuestionAsked = {
     tag: "question_asked";
     question: Question;
+    answers: [null | 0 | 1 | 2 | 3, null | 0 | 1 | 2 | 3];
     countdown: number;
 };
 type BattleStateIdle = { tag: "idle"; countdown: number };
+type BattleStateDone = { tag: "done"; winner: UserId; loser: UserId };
 
 type BattleState =
     | BattleStateQuestionAsked
-    | BattleStateIdle;
+    | BattleStateIdle
+    | BattleStateDone;
+
+type AnswerState =
+    | { tag: "none" }
+    | { tag: "requested_answer" }
+    | { tag: "answered"; answer: 0 | 1 | 2 | 3 };
+
+type TriviaPops = {
+    question: string;
+    answers: readonly [string, string, string, string];
+};
+
+type BattleUserReceive = { tag: "answer"; answer: number };
+
+type BattleUserSendInner =
+    | {
+        tag: "idle";
+        you: BaseData;
+        enemy: { name: string; base: BaseData };
+        countdown: number;
+    }
+    | { tag: "trivia"; trivia: TriviaPops; countdown: number }
+    | { tag: "trivia_waiting_on_enemy"; countdown: number };
+
+type BattleUserSend = { tag: "battle"; battle: BattleUserSendInner };
+
+export class BattleUser extends User<BattleUserReceive, BattleUserSend> {
+    readonly name: string;
+    readonly base: Base;
+    private answerState: AnswerState;
+
+    constructor(name: string, guts: Guts) {
+        super(guts);
+        this.name = name;
+        this.base = new Base();
+        this.answerState = { tag: "none" };
+    }
+
+    requestAnswer(): void {
+        if (this.answerState.tag !== "none") {
+            throw new Error(
+                "unreachable: should never be called before resetting",
+            );
+        }
+    }
+
+    answer(): 0 | 1 | 2 | 3 | null {
+        if (this.answerState.tag === "none") {
+            throw new Error(
+                "unreachable: should never be called before requesting answer",
+            );
+        }
+        if (this.answerState.tag === "requested_answer") {
+            return null;
+        }
+        return this.answerState.answer;
+    }
+
+    resetAnswer(): void {
+        this.answerState = { tag: "none" };
+    }
+}
 
 export class Battle {
     private state: BattleState;
-    private triviaGenerator: TriviaGenerator;
-    private fighters: [FighterExt, FighterExt];
-    public result: BattleResult | null;
+    private triviaGenerator: trivia.TriviaGenerator;
+    private users: [BattleUser, BattleUser];
 
-    constructor(fighters: [Fighter, Fighter]) {
-        this.result = null;
+    constructor(fighters: [BattleUser, BattleUser]) {
         this.state = { tag: "idle", countdown: 10 };
-        this.triviaGenerator = new TriviaGenerator();
-        this.fighters = [
-            { fighter: fighters[0], base: new Base() },
-            { fighter: fighters[1], base: new Base() },
-        ];
+        this.triviaGenerator = new trivia.TriviaGenerator();
+        this.users = fighters;
+    }
+
+    private other(fighter: BattleUser): BattleUser {
+        if (this.users[0].id() === fighter.id()) {
+            return this.users[1];
+        }
+        if (this.users[1].id() === fighter.id()) {
+            return this.users[0];
+        }
+        throw new Error("unreachable, should be either or");
+    }
+
+    private questionAnswered(state: BattleStateQuestionAsked): void {
+        const { trivia, soldier } = state.question;
+
+        iter(state.answers)
+            .filterMap((answer, user) => {
+                if (answer === null || !trivia.answers[answer].correct) {
+                    return null;
+                }
+                return user;
+            }).forEach((user) => {
+                this.users[user].base.addSoldier(
+                    soldier.health,
+                    soldier.damage,
+                );
+            });
+
+        this.state = { tag: "idle", countdown: 5 };
+        this.users.forEach((user) => user.resetAnswer());
+    }
+
+    private stepQuestionAsked(
+        state: BattleStateQuestionAsked,
+    ): void {
+        this.users.forEach((user, idx) => {
+            state.answers[idx] = user.answer();
+        });
+
+        const timeoutReached = state.countdown <= 0;
+        const everybodyAnswered = state.answers
+            .every((answer) => answer !== null);
+
+        if (timeoutReached || everybodyAnswered) {
+            return this.questionAnswered(state);
+        }
     }
 
     private askQuestion(_state: BattleStateIdle) {
@@ -155,172 +246,142 @@ export class Battle {
                     health: randInt(1, 8),
                     damage: randInt(1, 3),
                 },
-                answers: [null, null],
             },
+            answers: [null, null],
+        };
+        this.users.forEach((user) => user.requestAnswer());
+    }
+
+    private stepIdle(state: BattleStateIdle): void {
+        if (state.countdown <= 0) {
+            this.askQuestion(state);
+            return;
+        }
+        const loser = this.users.find(({ base }) => !base.alive());
+        if (loser === undefined) {
+            return;
+        }
+        const winner = this.other(loser);
+        this.state = {
+            tag: "done",
+            winner: winner.id(),
+            loser: loser.id(),
         };
     }
 
-    private questionAnswered(state: BattleStateQuestionAsked): false {
-        const correctAnswers = state.question.trivia.answers
-            .map((answer, idx) => [idx, answer[1]] as const)
-            .filter(([_idx, correct]) => correct)
-            .map(([idx, _correct]) => idx);
-
-        const answers = state.question.answers
-            .map((v) => v !== null && correctAnswers.includes(v));
-
-        const soldier = state.question.soldier;
-
-        answers.forEach((correct, idx) => {
-            if (!correct) {
-                return;
-            }
-            this.fighters[idx].base.addSoldier(soldier.health, soldier.damage);
-        });
-
-        this.state = { tag: "idle", countdown: 5 };
-
-        return false;
+    result(): { winner: UserId; loser: UserId } | null {
+        if (this.state.tag !== "done") {
+            return null;
+        }
+        return this.state;
     }
 
-    private stepQuestionAsked(
-        state: BattleStateQuestionAsked,
-    ): false {
-        this.fighters.forEach((fighter, i) => {
-            const answer = fighter.fighter.answer();
-            if (answer.tag === "requested_answer") {
+    disconnectHappened(id: UserId) {
+        if (this.state.tag === "done") return;
+        const loser = this.users.find((user) => user.id() === id);
+        if (loser === undefined) {
+            return;
+        }
+        const winner = this.other(loser);
+        this.state = {
+            tag: "done",
+            winner: winner.id(),
+            loser: loser.id(),
+        };
+    }
+
+    step() {
+        if (this.state.tag === "done") return;
+        this.logic();
+        this.render();
+    }
+
+    private logic() {
+        if (this.state.tag === "done") return;
+        switch (this.state.tag) {
+            case "question_asked":
+                return this.stepQuestionAsked(this.state);
+            case "idle":
+                return this.stepIdle(this.state);
+            default:
+                assertUnreachable(this.state);
+        }
+    }
+
+    private renderQuestionAsked(state: BattleStateQuestionAsked) {
+        function respond(
+            state: BattleStateQuestionAsked,
+            me: BattleUser,
+        ) {
+            const hasAnswered = me.answer() !== null;
+            if (hasAnswered) {
+                me.send({
+                    tag: "battle",
+                    battle: {
+                        tag: "trivia_waiting_on_enemy",
+                        countdown: state.countdown,
+                    },
+                });
                 return;
             }
-            state.question.answers[i] = answer.answer;
-        });
-
-        const timeoutReached = state.countdown <= 0;
-        const everybodyAnswered = state.question.answers
-            .every((answer) => answer !== null);
-
-        if (timeoutReached || everybodyAnswered) {
-            return this.questionAnswered(state);
-        }
-
-        this.fighters.forEach(({ fighter }, i) => {
-            const waitingOnEnemy = state.question.answers[i] !== null;
-
-            const question = {
-                question: state.question.trivia.question,
-                answers: [
-                    state.question.trivia.answers[0][0],
-                    state.question.trivia.answers[1][0],
-                    state.question.trivia.answers[2][0],
-                    state.question.trivia.answers[3][0],
-                ] as const,
-            };
-
-            const battle = waitingOnEnemy
-                ? {
-                    tag: "question_waiting_on_enemy" as const,
-                }
-                : {
-                    tag: "question" as const,
-                    question,
-                };
-
-            fighter.sendMessage({
-                tag: "battle",
-                battle: {
-                    ...battle,
-                    countdown: state.countdown,
+            const trivia = state.question.trivia;
+            const battle = {
+                tag: "trivia",
+                countdown: state.countdown,
+                trivia: {
+                    question: trivia.question,
+                    answers: [
+                        trivia.answers[0].content,
+                        trivia.answers[1].content,
+                        trivia.answers[2].content,
+                        trivia.answers[3].content,
+                    ],
                 },
+            } as const;
+            me.send({
+                tag: "battle",
+                battle,
             });
-        });
-        return false;
+        }
+
+        this.users.forEach((me) => respond(state, me));
     }
 
-    private stepIdle(state: BattleStateIdle): boolean {
-        if (state.countdown <= 0) {
-            this.askQuestion(state);
-            return false;
-        }
-        const base = [
-            this.fighters[0].base,
-            this.fighters[1].base,
-        ] as const;
-
-        base[0].step(base[1]);
-        base[1].step(base[0]);
-
-        const anyDead = base.some((b) => !b.alive());
-        if (anyDead) {
-            const allDead = base.every((b) => !b.alive());
-            if (allDead) {
-                this.result = { tag: "tie" };
-            } else {
-                const winner = base[0].alive() ? 0 : 1;
-                const loser = base[0].alive() ? 1 : 0;
-                this.result = {
-                    tag: "done",
-                    winner: this.fighters[winner].fighter.id,
-                    loser: this.fighters[loser].fighter.id,
-                };
-            }
-            return true;
-        }
-
-        this.fighters.forEach(({ fighter, base }, i) => {
-            const enemy = i === 0 ? this.fighters[1] : this.fighters[0];
-            fighter.sendMessage({
+    private renderIdle(state: BattleStateIdle) {
+        function respond(
+            state: BattleStateIdle,
+            me: BattleUser,
+            enemy: BattleUser,
+        ) {
+            me.send({
                 tag: "battle",
                 battle: {
                     tag: "idle",
-                    you: base.data(),
+                    you: me.base.data(),
                     enemy: {
-                        name: enemy.fighter.name(),
+                        name: enemy.name,
                         base: enemy.base.data(),
                     },
+                    countdown: state.countdown,
                 },
             });
+        }
+
+        this.users.forEach((me, idx) => {
+            const enemy = idx === 0 ? this.users[1] : this.users[0];
+            respond(state, me, enemy);
         });
-
-        return false;
     }
 
-    private step(): boolean {
-        const anyDisconnected = this.fighters
-            .some(({ fighter }) => !fighter.connected());
-        if (anyDisconnected) {
-            const allDisconnected = this.fighters
-                .every(({ fighter }) => !fighter.connected());
-            if (allDisconnected) {
-                this.result = { tag: "tie" };
-            } else {
-                const winner = this.fighters[0].fighter.connected() ? 0 : 1;
-                const loser = this.fighters[0].fighter.connected() ? 1 : 0;
-                this.result = {
-                    tag: "done",
-                    winner: this.fighters[winner].fighter.id,
-                    loser: this.fighters[loser].fighter.id,
-                };
-            }
-            return true;
-        }
-        this.state.countdown -= 1;
+    private render() {
+        if (this.state.tag === "done") return;
         switch (this.state.tag) {
-            case "question_asked": {
-                return this.stepQuestionAsked(this.state);
-            }
-            case "idle": {
-                return this.stepIdle(this.state);
-            }
-        }
-    }
-
-    async start(): Promise<void> {
-        while (true) {
-            const fightOver = this.step();
-            if (!fightOver) {
-                await wait(1);
-                continue;
-            }
-            return;
+            case "question_asked":
+                return this.renderQuestionAsked(this.state);
+            case "idle":
+                return this.renderIdle(this.state);
+            default:
+                assertUnreachable(this.state);
         }
     }
 }

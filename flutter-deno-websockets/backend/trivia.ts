@@ -1,4 +1,4 @@
-export type TriviaAnswer = [string, boolean];
+export type TriviaAnswer = { content: string; correct: boolean };
 
 export type Trivia = {
     question: string;
@@ -13,18 +13,18 @@ export type Trivia = {
 const trivia: Trivia[] = [{
     question: "what's 2+2?",
     answers: [
-        ["4", true],
-        ["2", false],
-        ["9", false],
-        ["2", false],
+        { content: "4", correct: true },
+        { content: "2", correct: false },
+        { content: "9", correct: false },
+        { content: "2", correct: false },
     ],
 }, {
     question: "what's 4+4?",
     answers: [
-        ["4", false],
-        ["2", false],
-        ["8", true],
-        ["9", false],
+        { content: "4", correct: false },
+        { content: "2", correct: false },
+        { content: "8", correct: true },
+        { content: "9", correct: false },
     ],
 }];
 
