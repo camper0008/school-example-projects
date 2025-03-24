@@ -160,6 +160,7 @@ export class FightingUser extends User<BattleUserReceive, BattleUserSend> {
                 "unreachable: should never be called before resetting",
             );
         }
+        this.answerState = { tag: "requested_answer" };
     }
 
     protected override received(message: BattleUserReceive): void {
@@ -199,7 +200,7 @@ export class Battle {
     private users: [FightingUser, FightingUser];
 
     constructor(fighters: [FightingUser, FightingUser]) {
-        this.state = { tag: "idle", countdown: 10 };
+        this.state = { tag: "idle", countdown: 120 };
         this.triviaGenerator = new trivia.TriviaGenerator();
         this.users = fighters;
     }
@@ -312,6 +313,7 @@ export class Battle {
 
     private logic() {
         if (this.state.tag === "done") return;
+        this.state.countdown -= 1;
         switch (this.state.tag) {
             case "question_asked":
                 return this.stepQuestionAsked(this.state);

@@ -90,12 +90,13 @@ export class UserManager {
         if (this.registered.length < 2) {
             return;
         }
+        const length = this.registered.length;
         const candidates = iter(this.registered)
             .extract((_, i) => {
                 if (i % 2 !== 0) {
                     return true;
                 }
-                return i + 1 < this.registered.length;
+                return i + 1 < length;
             })
             .toList();
         for (let i = 0; i < candidates.length; i += 2) {
@@ -107,9 +108,18 @@ export class UserManager {
     }
 
     private sendLeaderboard() {
+        const users = [
+            ...this.registered.map((v) => `${v.name} (waiting)`),
+            ...this.fighting.map((v) => `${v.name} (fighting)`),
+        ];
         this.registered
             .forEach((user) =>
-                user.send({ tag: "leaderboard", leaderboard: this.leaderboard })
+                user.send({
+                    tag: "leaderboard",
+                    leaderboard: this.leaderboard,
+                    you: user.name,
+                    users: users,
+                })
             );
     }
 
@@ -200,7 +210,12 @@ class UnregisteredUser
     }
 }
 
-type RegisteredUserSend = { tag: "leaderboard"; leaderboard: Leaderboard };
+type RegisteredUserSend = {
+    tag: "leaderboard";
+    leaderboard: Leaderboard;
+    you: string;
+    users: string[];
+};
 
 class RegisteredUser extends User<void, RegisteredUserSend> {
     public readonly name: string;
