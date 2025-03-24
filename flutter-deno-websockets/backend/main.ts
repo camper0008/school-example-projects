@@ -1,4 +1,4 @@
-import { UserManager } from "./user.ts";
+import { UserManager } from "./user_manager.ts";
 
 function main() {
     const man = new UserManager();

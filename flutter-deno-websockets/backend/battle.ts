@@ -162,6 +162,20 @@ export class FightingUser extends User<BattleUserReceive, BattleUserSend> {
         }
     }
 
+    protected override received(message: BattleUserReceive): void {
+        if (this.answerState.tag !== "requested_answer") {
+            this.send({ tag: "error", message: "messaged out of order" });
+        }
+        if (
+            message.answer !== 0 && message.answer !== 1 &&
+            message.answer !== 2 && message.answer !== 3
+        ) {
+            this.send({ tag: "error", message: "invalid answer" });
+            return;
+        }
+        this.answerState = { tag: "answered", answer: message.answer };
+    }
+
     answer(): 0 | 1 | 2 | 3 | null {
         if (this.answerState.tag === "none") {
             throw new Error(
