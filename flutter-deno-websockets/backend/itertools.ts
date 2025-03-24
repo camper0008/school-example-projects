@@ -22,6 +22,36 @@ class ItertoolsExt<T> {
         this.inner = inner;
     }
 
+    extractMap<To extends NonNullable<S>, S>(
+        predicate: (value: T, index: number) => To | null,
+    ): ItertoolsExt<To> {
+        const input = drain(this.inner);
+        const out: To[] = [];
+
+        for (const [index, value] of input.entries()) {
+            const mapped = predicate(value, index);
+            if (mapped === null) {
+                this.inner.push(value);
+                continue;
+            }
+            out.push(mapped);
+        }
+        return iter(out);
+    }
+
+    extract(
+        predicate: (value: T, index: number) => boolean,
+    ): ItertoolsExt<T> {
+        const input = drain(this.inner);
+        const out: T[] = [];
+
+        for (const [index, value] of input.entries()) {
+            if (!predicate(value, index)) this.inner.push(value);
+            out.push(value);
+        }
+        return iter(out);
+    }
+
     filterInPlace(
         predicate: (value: T, index: number) => boolean,
     ): void {

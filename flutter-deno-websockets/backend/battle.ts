@@ -142,7 +142,7 @@ type BattleUserSendInner =
 
 type BattleUserSend = { tag: "battle"; battle: BattleUserSendInner };
 
-export class BattleUser extends User<BattleUserReceive, BattleUserSend> {
+export class FightingUser extends User<BattleUserReceive, BattleUserSend> {
     readonly name: string;
     readonly base: Base;
     private answerState: AnswerState;
@@ -182,15 +182,15 @@ export class BattleUser extends User<BattleUserReceive, BattleUserSend> {
 export class Battle {
     private state: BattleState;
     private triviaGenerator: trivia.TriviaGenerator;
-    private users: [BattleUser, BattleUser];
+    private users: [FightingUser, FightingUser];
 
-    constructor(fighters: [BattleUser, BattleUser]) {
+    constructor(fighters: [FightingUser, FightingUser]) {
         this.state = { tag: "idle", countdown: 10 };
         this.triviaGenerator = new trivia.TriviaGenerator();
         this.users = fighters;
     }
 
-    private other(fighter: BattleUser): BattleUser {
+    private other(fighter: FightingUser): FightingUser {
         if (this.users[0].id() === fighter.id()) {
             return this.users[1];
         }
@@ -311,7 +311,7 @@ export class Battle {
     private renderQuestionAsked(state: BattleStateQuestionAsked) {
         function respond(
             state: BattleStateQuestionAsked,
-            me: BattleUser,
+            me: FightingUser,
         ) {
             const hasAnswered = me.answer() !== null;
             if (hasAnswered) {
@@ -350,8 +350,8 @@ export class Battle {
     private renderIdle(state: BattleStateIdle) {
         function respond(
             state: BattleStateIdle,
-            me: BattleUser,
-            enemy: BattleUser,
+            me: FightingUser,
+            enemy: FightingUser,
         ) {
             me.send({
                 tag: "battle",

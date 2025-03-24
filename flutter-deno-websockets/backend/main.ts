@@ -1,13 +1,13 @@
-import { Arena, User } from "./arena.ts";
+import { UserManager } from "./user.ts";
 
 function main() {
-    const battle = new Arena();
+    const man = new UserManager();
     Deno.serve((req) => {
         if (req.headers.get("upgrade") != "websocket") {
             return new Response(null, { status: 501 });
         }
         const { socket, response } = Deno.upgradeWebSocket(req);
-        new User(socket, battle);
+        man.socketCreated(socket);
         return response;
     });
 }

@@ -1,3 +1,4 @@
+import { Battle, FightingUser } from "./battle.ts";
 import { Hook } from "./event.ts";
 import { iter } from "./itertools.ts";
 
@@ -15,30 +16,132 @@ export class Guts {
     }
 }
 
+type Leaderboard = { [name: RegisteredUser["name"]]: number };
+
 export class UserManager {
     private interval: number;
     private idCount: number;
-    private unopened: UnopenedUser[];
+    private unconnected: UnconnectedUser[];
     private unregistered: UnregisteredUser[];
     private registered: RegisteredUser[];
+    private fighting: FightingUser[];
+    private battles: Battle[];
+    private disconnected: UserId[];
+    private leaderboard: Leaderboard;
 
     constructor() {
         this.idCount = 0;
-        this.unopened = [];
+        this.unconnected = [];
         this.unregistered = [];
         this.registered = [];
+        this.fighting = [];
+        this.battles = [];
+        this.disconnected = [];
+        this.leaderboard = {};
         this.interval = setInterval(() => this.step(), 1000);
     }
 
     private users() {
         return [
-            this.unopened,
+            this.unconnected,
             this.unregistered,
             this.registered,
+            this.fighting,
         ] as const;
     }
 
+    private notifyBattlesOfDisconnect() {
+        this.disconnected.forEach((id) =>
+            this.battles.forEach((battle) => battle.disconnectHappened(id))
+        );
+    }
+    private battleStep() {
+        this.battles.forEach((battle) => battle.step());
+    }
+    private evaluateFinishedBattles() {
+        iter(this.battles)
+            .extractMap((battle) => battle.result())
+            .forEach(({ winner: winnerId, loser: loserId }) => {
+                const fighters = iter(this.fighting)
+                    .extract((user) =>
+                        user.id() === winnerId || user.id() === loserId
+                    ).toList();
+                if (fighters.length !== 2) {
+                    throw new Error(
+                        `expected length of 2, got ${fighters.length}`,
+                    );
+                }
+                const winner = fighters
+                    .find((user) => user.id() === winnerId);
+                const loser = fighters
+                    .find((user) => user.id() === loserId);
+
+                if (winner === undefined || loser === undefined) {
+                    throw new Error("somehow purged prematurely");
+                }
+
+                const winnerScore = this.leaderboard[winner.name] ?? 0;
+                const loserScore = this.leaderboard[loser.name] ?? 0;
+
+                this.leaderboard[winner.name] = winnerScore + 1;
+                this.leaderboard[loser.name] = loserScore - 1;
+
+                const winnerGuts = winner.dispose();
+                const loserGuts = loser.dispose();
+
+                this.registered.push(
+                    new RegisteredUser(winner.name, winnerGuts),
+                    new RegisteredUser(loser.name, loserGuts),
+                );
+            });
+    }
+
+    private startNewBattles() {
+        function toFightingUser(user: RegisteredUser): FightingUser {
+            const guts = user.dispose();
+            return new FightingUser(user.name, guts);
+        }
+        if (this.registered.length < 2) {
+            return;
+        }
+        const candidates = iter(this.registered)
+            .extract((_, i) => {
+                if (i % 2 !== 0) {
+                    return true;
+                }
+                return i + 1 < this.registered.length;
+            })
+            .toList();
+        for (let i = 0; i < candidates.length; i += 2) {
+            const left = toFightingUser(candidates[i]);
+            const right = toFightingUser(candidates[i + 1]);
+            this.fighting.push(left, right);
+            this.battles.push(new Battle([left, right]));
+        }
+    }
+
+    private sendLeaderboard() {
+        this.registered
+            .forEach((user) =>
+                user.send({ tag: "leaderboard", leaderboard: this.leaderboard })
+            );
+    }
+
     private step() {
+        this.battleStep();
+        this.notifyBattlesOfDisconnect();
+        this.evaluateFinishedBattles();
+        this.purgeDisconnected();
+        this.startNewBattles();
+        this.sendLeaderboard();
+    }
+
+    private purgeDisconnected() {
+        while (true) {
+            const user = this.disconnected.pop();
+            if (user === undefined) break;
+            this.purge(user);
+        }
     }
 
     newId(): UserId {
@@ -46,12 +149,12 @@ export class UserManager {
         return this.idCount;
     }
 
-    userConnected(socket: WebSocket) {
+    socketCreated(socket: WebSocket) {
         const guts = new Guts(this, socket);
-        this.unopened.push(new UnopenedUser(guts));
+        this.unconnected.push(new UnconnectedUser(guts));
     }
 
-    userOpened(user: UnopenedUser) {
+    userOpened(user: UnconnectedUser) {
         this.purge(user.id());
         const guts = user.dispose();
         this.unregistered.push(new UnregisteredUser(guts));
@@ -73,8 +176,8 @@ export class UserManager {
         });
     }
 
-    userClosed<R, S>(user: User<R, S>) {
-        this.purge(user.id());
+    userDisconnected<R, S>(user: User<R, S>) {
+        this.disconnected.push(user.id());
     }
 
     dispose() {
@@ -100,8 +203,8 @@ export abstract class User<
     constructor(guts: Guts) {
         this.guts = guts;
         this.hook = new Hook(this.guts.socket);
-        this.hook.connected(() => this.opened());
-        this.hook.disconnected(() => this.closed());
+        this.hook.connected(() => this.connected());
+        this.hook.disconnected(() => this.disconnected());
         this.hook.messaged((event) => {
             try {
                 const data = JSON.parse(event.data);
@@ -127,12 +230,12 @@ export abstract class User<
         this.guts.socket.send(JSON.stringify(message));
     }
 
-    protected opened(): void {}
+    protected connected(): void {}
 
     protected received(_message: Receive): void {}
 
-    protected closed(): void {
-        this.guts.manager.userClosed(this);
+    protected disconnected(): void {
+        this.guts.manager.userDisconnected(this);
     }
 
     dispose(): Guts {
@@ -141,11 +244,11 @@ export abstract class User<
     }
 }
 
-class UnopenedUser extends User<void, void> {
+class UnconnectedUser extends User<void, void> {
     constructor(guts: Guts) {
         super(guts);
     }
-    override opened(): void {
+    override connected(): void {
         this.manager().userOpened(this);
     }
 }
@@ -167,7 +270,9 @@ class UnregisteredUser
     }
 }
 
-class RegisteredUser extends User<void, void> {
+type RegisteredUserSend = { tag: "leaderboard"; leaderboard: Leaderboard };
+
+class RegisteredUser extends User<void, RegisteredUserSend> {
     public readonly name: string;
 
     constructor(name: string, guts: Guts) {
